@@ -6,7 +6,7 @@ var fs=require('fs'),
     JSFtp=require('jsftp');
 
 var Storage=function(args){
-	EventEmitter.call(this);
+    EventEmitter.call(this);
     var self=this;
     var _existsSync = fs.existsSync || path.existsSync;
 
@@ -95,8 +95,16 @@ var Storage=function(args){
         }
     }
 
+    var _endsWith=function(s,e){
+        return s.indexOf(suffix, s.length - s.length) !== -1;
+    }
+
     Storage.prototype.upload = _upload; 
     Storage.prototype.download = _download; 
+    Storage.prototype.toRemote = function(name){
+        if(!config.root || config.root=='/') return '/published/'+name;
+        return '/published'+(_endsWith(config.root,'/') ? config.root :config.root+'/')+name;
+    }
 
 }
 util.inherits(Storage, EventEmitter);

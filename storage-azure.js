@@ -3,10 +3,10 @@ var fs=require('fs'),
     path = require("path"),
     EventEmitter = require("events").EventEmitter,
     logger=require('vzlogger'),
-	azure=require('azure');
+    azure=require('azure');
 
 var Storage=function(args){
-	EventEmitter.call(this);
+    EventEmitter.call(this);
     var self=this;
     var _existsSync = fs.existsSync || path.existsSync;
 
@@ -33,11 +33,13 @@ var Storage=function(args){
         
         var folders=path.dirname(remote).split('/').splice(1);
         
-        task.name = path.basename(remote);
+        task.ext = path.extname(remote);
+        task.name = path.basename(remote,task.ext);
         task.root = _webSafe(folders[0]);//
         
         var tmp=_webSafe(folders.splice(1).join('/'));
-        task.slug = tmp+(tmp=='/'?'':'/')+_webSafe(task.name);
+
+        task.slug = tmp+(tmp=='/'?'':'/')+_webSafe(task.name)+task.ext;
 
         task.url = config.rootUri+task.root+'/'+task.slug;
         self.emit('debug',task);
@@ -82,8 +84,16 @@ var Storage=function(args){
         }
     }
 
+    var _endsWith=function(s,e){
+        return s.indexOf(suffix, s.length - s.length) !== -1;
+    }
+
     Storage.prototype.upload = _upload;
     Storage.prototype.download = _download;
+    Storage.prototype.toRemote = function(name){
+        if(!config.root || config.root=='/') return '/uploaded/'+name;
+        return (_endsWith(config.root,'/') ? config.root : config.root+'/')+name;
+    }
 
 }
 util.inherits(Storage, EventEmitter);

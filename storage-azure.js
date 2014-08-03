@@ -22,12 +22,19 @@ var Storage=function(args){
 
     var _blob=azure.createBlobService(config.accountName,config.accountKey);
 
-
     var _webSafe=function(t){
         if(!t) return "";
-        return t.toLowerCase().match(/[a-z0-9\/]+/g).join('');
+        return t.toLowerCase().match(/[a-z0-9\.\/-]+/g).join('');
     }
+
+    var _join=function(){
+        return path.join.apply(this,arguments).split('\\').join('/');
+    }
+
     var _init=function(remote,local){
+
+        if(remote[0]!='/')  remote='/'+remote;
+
         task.dir=path.dirname(local);
         if (!fs.existsSync(task.dir)) {fs.mkdirSync(task.dir);}
         
@@ -39,12 +46,14 @@ var Storage=function(args){
         
         var tmp=_webSafe(folders.splice(1).join('/'));
 
-        task.slug = tmp+(tmp=='/'?'':'/')+_webSafe(task.name)+task.ext;
-
-        task.url = config.rootUri+task.root+'/'+task.slug;
+        task.slug = _join(tmp,_webSafe(task.name)+task.ext);
+        task.path = _join(task.root,task.slug);
+        task.url = config.rootUri+task.path;
         self.emit('debug',task);
         return local;
     }
+
+
 
     var _validateLocalFile=function(remote,local){
         return !_existsSync(_init(remote,local));
@@ -56,10 +65,10 @@ var Storage=function(args){
         return true;
     }
 
-    var _upload=function(remote,local){
+    var _upload=function(remote,local,private){
         if(_validateUploadFile(remote,local)){
             self.emit('debug','azure validated');
-            _blob.createContainerIfNotExists(task.root, {publicAccessLevel : task.root=='private' ? null:'blob'},function(err){
+            _blob.createContainerIfNotExists(task.root, {publicAccessLevel : task.root=='private' || !!private ? null:'blob'},function(err){
                 if(!!err) return self.emit('error',{error:err});
                 self.emit('debug','azure created');
                 _blob.createBlockBlobFromFile(task.root,task.slug,local,function(err1){
@@ -88,11 +97,11 @@ var Storage=function(args){
         return s.indexOf(suffix, s.length - s.length) !== -1;
     }
 
+    Storage.prototype.currentTask=function(){ return task;}
     Storage.prototype.upload = _upload;
     Storage.prototype.download = _download;
     Storage.prototype.toRemote = function(name){
-        if(!config.root || config.root=='/') return '/uploaded/'+name;
-        return (_endsWith(config.root,'/') ? config.root : config.root+'/')+name;
+        return _join('uploaded',config.root||'',_webSafe(path.basename(name,path.extname(name))),_webSafe(name));
     }
 
 }

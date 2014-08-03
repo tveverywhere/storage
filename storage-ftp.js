@@ -21,16 +21,51 @@ var Storage=function(args){
         password:d.Password
     }
 
+
+    var _endsWith=function(s,e){
+        return s.indexOf(e, s.length - s.length) !== -1;
+    }
+
+    var _parseHttpUri=function(k,root){
+        if(k.indexOf('http')==0) return k;
+        k='http://'+k;
+        if(!_endsWith(k,root)) k+=root;
+        if(!_endsWith(k,'/')) k+='/';
+        return k;
+    }
+
     var _loadFTP=function(){
         return new JSFtp({host: config.host,port: config.port || 21,user: config.username,pass: config.password});
     }
 
+    var _webSafe=function(t){
+        if(!t) return "";
+        return t.toLowerCase().match(/[a-z0-9\.\/-]+/g).join('');
+    }
+
+    var _join=function(){
+        return path.join.apply(this,arguments).split('\\').join('/');
+    }
+
     var _init=function(remote,local){
-        task.dir=path.dirname(local);
-        if (!fs.existsSync(task.dir)) {fs.mkdirSync(task.dir);}
-        task.name=path.basename(local);
-        task.url=config.rootUri+remote;
+        
+        if(remote[0]!='/') remote='/'+remote;
+
+        var folders= path.dirname(remote).split('/');
+        task.ext = path.extname(remote);
+        task.name = path.basename(remote,task.ext);
+        task.root = _webSafe(folders[0]);//
+        
+        var tmp=_webSafe(folders.splice(1).join('/'));
+
+        task.slug =  '/'+_join(tmp,_webSafe(task.name)+task.ext).replace('published/','');
+        task.path = _fixRemote(_join(task.root,task.slug));
+        task.url = config.rootUri+task.slug.substring(1);
+
+        self.emit('debug',task);
+        //throw ex;
         return local;
+
     }
 
     var _validateLocalFile=function(remote,local){
@@ -44,8 +79,9 @@ var Storage=function(args){
     }
 
     var _fixRemote=function(remote){
-        if(remote.indexOf(config.root)==-1 && remote.indexOf('/published')==-1) remote=config.root+remote;
-        if(remote.indexOf('/published')==-1) remote='/published'+remote;
+        if(remote.indexOf(config.root)==-1 && remote.indexOf('/published')==-1 && remote.indexOf('published')!=0) remote=config.root+remote;
+        if(remote.indexOf('/published')==-1 && remote.indexOf('published')!=0) remote='/published'+remote;
+        if(remote[0]!='/') remote='/'+remote;
         return remote;
     }
 
@@ -66,9 +102,8 @@ var Storage=function(args){
         if(_validateUploadFile(remote,local)){
             logger.info('uploading',task.name);
             var ftp=_loadFTP();
-            remote=_fixRemote(remote);
-            _makeDir(ftp,path.dirname(remote),function(){
-               ftp.put(local,remote, function(err) {
+            _makeDir(ftp,path.dirname(task.path),function(){
+               ftp.put(local,task.path, function(err) {
                     ftp.raw.quit();
                     logger.info('uploaded',task.name,err||'');
                     if(!err) return self.emit('uploaded',task.url);
@@ -85,7 +120,7 @@ var Storage=function(args){
             remote=_fixRemote(remote);
             ftp.get(remote, local, function(err) {
                 ftp.raw.quit();
-                logger.info('downloaded',task.name,err||'');
+                logger.info('on-downloaded',task.name,err||'');
                 if(!err) return self.emit('downloaded',task.url);
                 else return self.emit('error',{error:err});
             });
@@ -95,17 +130,14 @@ var Storage=function(args){
         }
     }
 
-    var _endsWith=function(s,e){
-        return s.indexOf(suffix, s.length - s.length) !== -1;
-    }
-
+    Storage.prototype.currentTask=function(){ return task;}
     Storage.prototype.upload = _upload; 
     Storage.prototype.download = _download; 
     Storage.prototype.toRemote = function(name){
-        if(!config.root || config.root=='/') return '/published/'+name;
-        return '/published'+(_endsWith(config.root,'/') ? config.root :config.root+'/')+name;
+        return '/'+_join('published',config.root,_webSafe(path.basename(name,path.extname(name))),_webSafe(name));
     }
 
+    config.rootUri=_parseHttpUri(config.rootUri,config.root);
 }
 util.inherits(Storage, EventEmitter);
 exports = module.exports = function(args) {

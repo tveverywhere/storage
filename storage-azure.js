@@ -20,6 +20,14 @@ var Storage=function(args){
         accountKey:d.Password
     }
 
+
+    var Constants = require('azure/node_modules/azure-common/lib/util/constants');
+    if(!Constants){
+        logger.error("could not update timeout");
+    }else{
+        Constants.DEFAULT_CLIENT_REQUEST_TIMEOUT= 30 * 60 * 1000;
+    }
+
     var _blob=azure.createBlobService(config.accountName,config.accountKey);
 
     var _webSafe=function(t){
@@ -71,10 +79,26 @@ var Storage=function(args){
             _blob.createContainerIfNotExists(task.root, {publicAccessLevel : task.root=='private' || !!private ? null:'blob'},function(err){
                 if(!!err) return self.emit('error',{error:err});
                 self.emit('debug','azure created');
-                _blob.createBlockBlobFromFile(task.root,task.slug,local,function(err1){
-                    if(!err) return self.emit('uploaded',task.url);
-                    else return self.emit('error',{error:err});
+                var azserver=_blob.createBlockBlobFromFile(
+                    task.root,
+                    task.slug,local,
+                    {timeout:33*60*1000},
+                function(err1){
+                    clearInterval(pcheck);
+                    if(!err1){
+                      return self.emit('uploaded',task.url);   
+                    }else{
+                      return self.emit('error',{error:err1,message:'upload failed to cdn.'});
+                    }
                 });
+                var pcheck=setInterval(function(){
+                    self.emit('progress',{
+                        status:'uploading',
+                        size:azserver.completeSize,
+                        total:azserver.totalSize,
+                        progress:100*azserver.completeSize/azserver.totalSize
+                    });
+                },azserver._timeWindow); //check every 10 seconds.
             });
         }
     }
@@ -82,11 +106,20 @@ var Storage=function(args){
     var _download=function(remote,local){
         if(_validateLocalFile(remote,local)){
             logger.info('downloading',task.name);
-            _blob.getBlobToFile(task.root, task.slug,local,function(err){
+            var azserver=_blob.getBlobToFile(task.root, task.slug,local,{timeout:33*60*1000},function(err){
                 logger.info('downloaded',task.name,err||'');
+                clearInterval(pcheck);
                 if(!err) return self.emit('downloaded',task.url);
-                else return self.emit('error',{error:err});
+                else return self.emit('error',{error:err,message:'download failed from cdn.'});
             });
+            var pcheck=setInterval(function(){
+                self.emit('progress',{
+                    status:'downloading',
+                    size:azserver.completeSize,
+                    total:azserver.totalSize,
+                    progress:100*azserver.completeSize/azserver.totalSize
+                });
+            },azserver._timeWindow); //check every 10 seconds.
         }else{
             logger.info('download-ignored',task.name);
             self.emit('downloaded',task.url);
@@ -100,8 +133,8 @@ var Storage=function(args){
     Storage.prototype.currentTask=function(){ return task;}
     Storage.prototype.upload = _upload;
     Storage.prototype.download = _download;
-    Storage.prototype.toRemote = function(name){
-        return _join('uploaded',config.root||'',_webSafe(path.basename(name,path.extname(name))),_webSafe(name));
+    Storage.prototype.toRemote = function(name,md){
+        return _join(md||'uploaded',config.root||'',_webSafe(path.basename(name,path.extname(name))),_webSafe(name));
     }
 
 }

@@ -101,8 +101,12 @@ var Storage=function(args){
     var _upload=function(remote,local){
         if(_validateUploadFile(remote,local)){
             logger.info('uploading',task.name);
-            var ftp=_loadFTP();
+            var ftp=_loadFTP()
+                .on('progress',function(p){
+                    self.emit('progress',p);
+                });
             _makeDir(ftp,path.dirname(task.path),function(){
+               logger.info('dir-created',task.path);
                ftp.put(local,task.path, function(err) {
                     ftp.raw.quit();
                     logger.info('uploaded',task.name,err||'');
@@ -133,7 +137,7 @@ var Storage=function(args){
     Storage.prototype.currentTask=function(){ return task;}
     Storage.prototype.upload = _upload; 
     Storage.prototype.download = _download; 
-    Storage.prototype.toRemote = function(name){
+    Storage.prototype.toRemote = function(name,md){
         return '/'+_join('published',config.root,_webSafe(path.basename(name,path.extname(name))),_webSafe(name));
     }
 

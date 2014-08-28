@@ -1,6 +1,6 @@
 {
   "name": "vz-storage",
-  "version": "0.0.15",
+  "version": "0.0.19",
   "description": "VidZapper Storage Package",
   "author": {
     "name": "Anuj Pandey",
@@ -16,9 +16,9 @@
   },
   "main": "index.js",
   "dependencies": {
-    "azure": "^0.9.12",
+    "azure": "^0.9.15",
     "jsftp": "^1.3.1",
-    "vzlogger": "0.0.1"
+    "vzlogger": "0.0.2"
   },
   "homepage": "https://github.com/tveverywhere/storage"
 }

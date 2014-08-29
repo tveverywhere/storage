@@ -103,7 +103,12 @@ var Storage=function(args){
             logger.info('uploading',task.name);
             var ftp=_loadFTP()
                 .on('progress',function(p){
-                    self.emit('progress',p);
+                    self.emit('progress',{
+                        status:'uploading',
+                        size:p.transferred,
+                        total:p.total,
+                        progress:100*p.transferred/p.total
+                    });
                 });
             _makeDir(ftp,path.dirname(task.path),function(){
                logger.info('dir-created',task.path);
@@ -120,7 +125,15 @@ var Storage=function(args){
     var _download=function(remote,local){
         if(_validateLocalFile(remote,local)){
             logger.info('downloading',task.name);
-            var ftp=_loadFTP();
+            var ftp=_loadFTP()
+                .on('progress',function(p){
+                    self.emit('progress',{
+                        status:'downloading',
+                        size:p.transferred,
+                        total:p.total,
+                        progress:100*p.transferred/p.total
+                    });
+                });
             remote=_fixRemote(remote);
             ftp.get(remote, local, function(err) {
                 ftp.raw.quit();

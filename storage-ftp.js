@@ -98,26 +98,44 @@ var Storage=function(args){
         _doDir(2);
     }
 
+    var _reemit=function(event) {
+      return function(data) {
+        self.emit(event, data);
+      }
+    };
+
     var _upload=function(remote,local){
         if(_validateUploadFile(remote,local)){
             logger.info('uploading',task.name);
+            var lastProgress=0;
             var ftp=_loadFTP()
+                .on('error',_reemit('error'))
                 .on('progress',function(p){
-                    self.emit('progress',{
-                        status:'uploading',
-                        size:p.transferred,
-                        total:p.total,
-                        progress:100*p.transferred/p.total
-                    });
+                    var prg=(100*p.transferred/p.total)||0;
+                    if(prg!=lastProgress){
+                        lastProgres=prg;
+                        self.emit('progress',{
+                            status:'uploading',
+                            size:p.transferred,
+                            total:p.total,
+                            progress:prg
+                        });
+                    }
                 });
             _makeDir(ftp,path.dirname(task.path),function(){
                logger.info('dir-created',task.path);
-               ftp.put(local,task.path, function(err) {
-                    ftp.raw.quit();
-                    logger.info('uploaded',task.name,err||'');
-                    if(!err) return self.emit('uploaded',task.url);
-                    else return self.emit('error',{error:err});
-                });
+               fs.stat(local, function(err, stats) {
+                   var read = fs.createReadStream(local, {
+                      bufferSize: 2 * 1024 * 1024
+                   });
+                   read.size = err ? 0 : stats.size;
+                   ftp.put(read,task.path, function(err) {
+                        ftp.raw.quit();
+                        logger.info('uploaded',task.name,err||'');
+                        if(!err) return self.emit('uploaded',task.url);
+                        else return self.emit('error',{error:err});
+                    });
+                })
             });
         }
     }

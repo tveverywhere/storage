@@ -73,6 +73,12 @@ var Storage=function(args){
         return true;
     }
 
+     var _reemit=function(event) {
+      return function(data) {
+        self.emit(event, data);
+      }
+    };
+
     var _upload=function(remote,local,private){
         if(_validateUploadFile(remote,local)){
             self.emit('debug','azure validated');

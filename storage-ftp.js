@@ -2,7 +2,6 @@ var fs=require('fs'),
     util = require("util"),
     path = require("path"),
     EventEmitter = require("events").EventEmitter,
-    logger=require('vzlogger'),
     JSFtp=require('jsftp');
 
 var Storage=function(args){
@@ -106,7 +105,6 @@ var Storage=function(args){
 
     var _upload=function(remote,local){
         if(_validateUploadFile(remote,local)){
-            logger.info('uploading',task.name);
             var lastProgress=0;
             var ftp=_loadFTP()
                 .on('error',_reemit('error'))
@@ -123,7 +121,6 @@ var Storage=function(args){
                     }
                 });
             _makeDir(ftp,path.dirname(task.path),function(){
-               logger.info('dir-created',task.path);
                fs.stat(local, function(err, stats) {
                    var read = fs.createReadStream(local, {
                       bufferSize: 2 * 1024 * 1024
@@ -131,7 +128,6 @@ var Storage=function(args){
                    read.size = err ? 0 : stats.size;
                    ftp.put(read,task.path, function(err) {
                         ftp.raw.quit();
-                        logger.info('uploaded',task.name,err||'');
                         if(!err) return self.emit('uploaded',task.url);
                         else return self.emit('error',{error:err});
                     });
@@ -142,7 +138,6 @@ var Storage=function(args){
 
     var _download=function(remote,local){
         if(_validateLocalFile(remote,local)){
-            logger.info('downloading',task.name);
             var ftp=_loadFTP()
                 .on('progress',function(p){
                     self.emit('progress',{
@@ -155,12 +150,10 @@ var Storage=function(args){
             remote=_fixRemote(remote);
             ftp.get(remote, local, function(err) {
                 ftp.raw.quit();
-                logger.info('on-downloaded',task.name,err||'');
                 if(!err) return self.emit('downloaded',task.url);
                 else return self.emit('error',{error:err});
             });
         }else{
-            logger.info('download-ignored',task.name);
             self.emit('downloaded',task.url);
         }
     }

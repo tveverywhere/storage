@@ -2,7 +2,6 @@ var fs=require('fs'),
     util = require("util"),
     path = require("path"),
     EventEmitter = require("events").EventEmitter,
-    logger=require('vzlogger'),
     azure=require('azure');
 
 var Storage=function(args){
@@ -23,7 +22,7 @@ var Storage=function(args){
 
     var Constants = require('azure/node_modules/azure-common/lib/util/constants');
     if(!Constants){
-        logger.error("could not update timeout");
+        self.emit("error","could not update timeout");
     }else{
         Constants.DEFAULT_CLIENT_REQUEST_TIMEOUT= 30 * 60 * 1000;
     }
@@ -73,47 +72,41 @@ var Storage=function(args){
         return true;
     }
 
-     var _reemit=function(event) {
-      return function(data) {
-        self.emit(event, data);
-      }
-    };
-
     var _upload=function(remote,local,private){
-        if(_validateUploadFile(remote,local)){
-            self.emit('debug','azure validated');
-            _blob.createContainerIfNotExists(task.root, {publicAccessLevel : task.root=='private' || !!private ? null:'blob'},function(err){
-                if(!!err) return self.emit('error',{error:err});
-                self.emit('debug','azure created');
-                var azserver=_blob.createBlockBlobFromFile(
-                    task.root,
-                    task.slug,local,
-                    {timeout:33*60*1000},
-                function(err1){
-                    clearInterval(pcheck);
-                    if(!err1){
-                      return self.emit('uploaded',task.url);   
-                    }else{
-                      return self.emit('error',{error:err1,message:'upload failed to cdn.'});
-                    }
-                });
-                var pcheck=setInterval(function(){
-                    self.emit('progress',{
-                        status:'uploading',
-                        size:azserver.completeSize,
-                        total:azserver.totalSize,
-                        progress:100*azserver.completeSize/azserver.totalSize
-                    });
-                },azserver._timeWindow); //check every 10 seconds.
+
+        if(!_validateUploadFile(remote,local)) return;
+        self.emit('debug','azure validated');
+
+        _blob.createContainerIfNotExists(task.root, {publicAccessLevel : task.root=='private' || !!private ? null:'blob'},function(err){
+            if(!!err) return self.emit('error',{error:err});
+            self.emit('debug','azure created');
+            var azserver=_blob.createBlockBlobFromFile(
+                task.root,
+                task.slug,local,
+                {timeout:33*60*1000},
+            function(err1){
+                clearInterval(pcheck);
+                if(!err1){
+                  return self.emit('uploaded',task.url);   
+                }else{
+                  return self.emit('error',{error:err1,message:'upload failed to cdn.'});
+                }
             });
-        }
+            var pcheck=setInterval(function(){
+                console.log('raw',azserver);
+                self.emit('progress',{
+                    status:'uploading',
+                    size:azserver.completeSize,
+                    total:azserver.totalSize,
+                    progress:100*azserver.completeSize/azserver.totalSize
+                });
+            },azserver._timeWindow); //check every 10 seconds.
+        });
     }
 
     var _download=function(remote,local){
         if(_validateLocalFile(remote,local)){
-            logger.info('downloading',task.name);
             var azserver=_blob.getBlobToFile(task.root, task.slug,local,{timeout:33*60*1000},function(err){
-                logger.info('downloaded',task.name,err||'');
                 clearInterval(pcheck);
                 if(!err) return self.emit('downloaded',task.url);
                 else return self.emit('error',{error:err,message:'download failed from cdn.'});
@@ -127,7 +120,6 @@ var Storage=function(args){
                 });
             },azserver._timeWindow); //check every 10 seconds.
         }else{
-            logger.info('download-ignored',task.name);
             self.emit('downloaded',task.url);
         }
     }

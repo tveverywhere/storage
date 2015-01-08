@@ -76,24 +76,28 @@ var Storage=function(args){
 
         if(!_validateUploadFile(remote,local)) return;
         self.emit('debug','azure validated');
+        var isPrivte=task.root=='private' || !!private;
 
-        _blob.createContainerIfNotExists(task.root, {publicAccessLevel : task.root=='private' || !!private ? null:'blob'},function(err){
+        _blob.createContainerIfNotExists(task.root, {publicAccessLevel :  isPrivte ? null:'blob'},function(err){
             if(!!err) return self.emit('error',{error:err});
             self.emit('debug','azure created');
             var azserver=_blob.createBlockBlobFromFile(
                 task.root,
-                task.slug,local,
+                task.slug,
+                local,
                 {timeout:33*60*1000},
             function(err1){
                 clearInterval(pcheck);
-                if(!err1){
-                  return self.emit('uploaded',task.url);   
-                }else{
-                  return self.emit('error',{error:err1,message:'upload failed to cdn.'});
-                }
+                if(!!err1) return self.emit('error',{error:err1,message:'upload failed to cdn.'});
+                if(isPrivte) return self.emit('uploaded',task.url);  
+
+                _blob.acquireLease(task.root,task.slug,{ accessConditions: { 'if-modified-since': new Date().toUTCString()} }, function(error, lease, response){
+                    if(!!error) return self.emit('error',{error:error});
+                    self.emit('debug',{lease:lease,response:response});
+                    return self.emit('uploaded',task.url);  
+                });
             });
             var pcheck=setInterval(function(){
-                console.log('raw',azserver);
                 self.emit('progress',{
                     status:'uploading',
                     size:azserver.completeSize,
@@ -128,9 +132,32 @@ var Storage=function(args){
         return s.indexOf(suffix, s.length - s.length) !== -1;
     }
 
+    function _checkAcl(cb){
+        _blob.getServiceProperties(function(err,d){
+            if(!d.DefaultServiceVersion){
+                d={ Logging: { Version: '1.0', Delete: true, Read: true, Write: true, 
+                    RetentionPolicy: { Enabled: true, Days: 90 } },
+                    Metrics: { Version: '1.0', Enabled: true, IncludeAPIs: false, 
+                    RetentionPolicy: { Enabled: true, Days: 90 } }, 
+                DefaultServiceVersion: '2013-08-15' };
+                _blob.setServiceProperties(d,function(err1,d1){
+                    if(!!err1) console.log('Error-1',err1);
+                    _blob.getServiceProperties(function(err2,d2){
+                        if(!!err2) console.log('Error-2',err2);
+                        cb(d2.DefaultServiceVersion);
+                    });
+                })
+            }else{
+               cb(d.DefaultServiceVersion);
+            }
+        });
+    }
+
     Storage.prototype.currentTask=function(){ return task;}
     Storage.prototype.upload = _upload;
     Storage.prototype.download = _download;
+    Storage.prototype.fixAcl=_checkAcl;
+    
     Storage.prototype.toRemote = function(name,md){
         return _join(md||'uploaded',config.root||'',_webSafe(path.basename(name,path.extname(name))),_webSafe(name));
     }

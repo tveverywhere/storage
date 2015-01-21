@@ -108,12 +108,19 @@ var Storage=function(args){
         });
     }
 
-    var _download=function(remote,local){
+    var _download=function(remote,local,tried){
+        tried=tried||0;
         if(_validateLocalFile(remote,local)){
             var azserver=_blob.getBlobToFile(task.root, task.slug,local,{timeout:33*60*1000},function(err){
                 clearInterval(pcheck);
                 if(!err) return self.emit('downloaded',task.url);
-                else return self.emit('error',{error:err,message:'download failed from cdn.'});
+                else{ 
+                    if(err.message.indexOf('getaddrinfo')>-1){
+                        _download(remote,local,++tried);
+                    }else{
+                        return self.emit('error',{error:err,message:'download failed from cdn.'});
+                    }
+                }
             });
             var pcheck=setInterval(function(){
                 self.emit('progress',{

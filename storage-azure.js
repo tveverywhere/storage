@@ -115,7 +115,7 @@ var Storage=function(args){
                 clearInterval(pcheck);
                 if(!err) return self.emit('downloaded',task.url);
                 else{ 
-                    if(err.message.indexOf('getaddrinfo')>-1){
+                    if(err.message.indexOf('getaddrinfo')>-1 || err.message.indexOf('ECONNRESET')>-1 || err.message.indexOf('ECONN')>-1){
                         _download(remote,local,++tried);
                     }else{
                         return self.emit('error',{error:err,message:'download failed from cdn.'});

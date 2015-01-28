@@ -79,7 +79,7 @@ var Storage=function(args){
         var isPrivte=task.root=='private' || !!private;
 
         _blob.createContainerIfNotExists(task.root, {publicAccessLevel :  isPrivte ? null:'blob'},function(err){
-            if(!!err) return self.emit('error',{error:err});
+            if(!!err) return self.emit('error',err);
             self.emit('debug','azure created');
             var azserver=_blob.createBlockBlobFromFile(
                 task.root,
@@ -88,7 +88,11 @@ var Storage=function(args){
                 {timeout:33*60*1000},
             function(err1){
                 clearInterval(pcheck);
-                if(!!err1) return self.emit('error',{error:err1,message:'upload failed to cdn.'});
+                if(!!err1){
+                    console.error('Upload Failed -- >',err1);
+                    return self.emit('error',err1);
+                }
+                
                 if(isPrivte) return self.emit('uploaded',task.url);  
 
                 _blob.acquireLease(task.root,task.slug,{ accessConditions: { 'if-modified-since': new Date().toUTCString()} }, function(error, lease, response){

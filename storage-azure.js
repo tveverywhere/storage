@@ -81,34 +81,33 @@ var Storage=function(args){
         _blob.createContainerIfNotExists(task.root, {publicAccessLevel :  isPrivte ? null:'blob'},function(err){
             if(!!err) return self.emit('error',err);
             self.emit('debug','azure created');
-            var azserver=_blob.createBlockBlobFromFile(
-                task.root,
-                task.slug,
-                local,
-                {timeout:33*60*1000},
-            function(err1){
-                clearInterval(pcheck);
-                if(!!err1){
-                    console.error('Upload Failed -- >',err1);
-                    return self.emit('error',err1);
-                }
-                
-                if(isPrivte) return self.emit('uploaded',task.url);  
+            _blob.deleteBlob(task.root,task.slug, function(error, response){
+                var azserver=_blob.createBlockBlobFromFile(task.root,task.slug,local, {timeout:33*60*1000}, function(err1){
+                    clearInterval(pcheck);
 
-                _blob.acquireLease(task.root,task.slug,{ accessConditions: { 'if-modified-since': new Date().toUTCString()} }, function(error, lease, response){
-                    if(!!error) return self.emit('error',{error:error});
-                    self.emit('debug',{lease:lease,response:response});
-                    return self.emit('uploaded',task.url);  
+                    if(!!err1){
+                        console.error('Upload Failed -- >',err1);
+                        return self.emit('error',err1);
+                    }
+                    
+                    if(isPrivte) return self.emit('uploaded',task.url);  
+
+                    _blob.acquireLease(task.root,task.slug,{ accessConditions: { 'if-modified-since': new Date().toUTCString()} }, function(error, lease, response){
+                        if(!!error) return self.emit('error',{error:error});
+                        self.emit('debug',{lease:lease,response:response});
+                        return self.emit('uploaded',task.url);  
+                    });
+                    
                 });
+                var pcheck=setInterval(function(){
+                    self.emit('progress',{
+                        status:'uploading',
+                        size:azserver.completeSize,
+                        total:azserver.totalSize,
+                        progress:100*azserver.completeSize/azserver.totalSize
+                    });
+                },azserver._timeWindow); //check every 10 seconds.
             });
-            var pcheck=setInterval(function(){
-                self.emit('progress',{
-                    status:'uploading',
-                    size:azserver.completeSize,
-                    total:azserver.totalSize,
-                    progress:100*azserver.completeSize/azserver.totalSize
-                });
-            },azserver._timeWindow); //check every 10 seconds.
         });
     }
 

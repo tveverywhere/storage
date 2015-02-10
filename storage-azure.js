@@ -77,6 +77,7 @@ var Storage=function(args){
         if(!_validateUploadFile(remote,local)) return;
         self.emit('debug','azure validated');
         var isPrivte=task.root=='private' || !!private;
+        var isVideo=task.slug.indexOf('.mp4')==task.slug.length;
 
         _blob.createContainerIfNotExists(task.root, {publicAccessLevel :  isPrivte ? null:'blob'},function(err){
             if(!!err) return self.emit('error',err);
@@ -86,14 +87,19 @@ var Storage=function(args){
                     clearInterval(pcheck);
 
                     if(!!err1){
-                        console.error('Upload Failed -- >',err1);
+                        err1.url=task.url;
+                        console.log('upload-failed');
                         return self.emit('error',err1);
                     }
                     
-                    if(isPrivte) return self.emit('uploaded',task.url);  
+                    if(isPrivte && !isVideo) return self.emit('uploaded',task.url);  
 
-                    _blob.acquireLease(task.root,task.slug,{ accessConditions: { 'if-modified-since': new Date().toUTCString()} }, function(error, lease, response){
-                        if(!!error) return self.emit('error',{error:error});
+                    _blob.acquireLease(task.root,task.slug,{ accessConditions: { 'if-modified-since': new Date().toUTCString()} }, function(err2, lease, response){
+                        if(!!err2){
+                            err2.url=task.url;
+                            console.log('upload-failed');
+                            return self.emit('error',err2);
+                        }
                         self.emit('debug',{lease:lease,response:response});
                         return self.emit('uploaded',task.url);  
                     });

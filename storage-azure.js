@@ -72,48 +72,59 @@ var Storage=function(args){
         return true;
     }
 
-    var _upload=function(remote,local,private){
+    var _upload=function(remote,local,privte){
 
         if(!_validateUploadFile(remote,local)) return;
         self.emit('debug','azure validated');
-        var isPrivte=task.root=='private' || !!private;
+        var isPrivte=task.root=='private' || !!privte;
         var isVideo=task.slug.indexOf('.mp4')==task.slug.length;
 
         _blob.createContainerIfNotExists(task.root, {publicAccessLevel :  isPrivte ? null:'blob'},function(err){
             if(!!err) return self.emit('error',err);
             self.emit('debug','azure created');
-            _blob.deleteBlob(task.root,task.slug, function(error, response){
-                var azserver=_blob.createBlockBlobFromFile(task.root,task.slug,local, {timeout:33*60*1000}, function(err1){
-                    clearInterval(pcheck);
+            var azserver=_blob.createBlockBlobFromFile(task.root,task.slug,local, {timeout:33*60*1000}, function(err1){
 
-                    if(!!err1){
-                        err1.url=task.url;
-                        console.log('upload-failed');
+                clearInterval(pcheck);
+                if(!!err1){
+                    err1.url=task.url;
+                    if(err1.code=='LeaseIdMissing' && !isPrivte){
+                        self.emit('debug',{warning:err1});
+                        _blob.deleteContainer(task.root,function(deleteError, deleteResponse){
+                            self.emit('debug',{warning:deleteError,response:deleteResponse});
+                            if(!!deleteError){
+                                return self.emit('error',deleteError);
+                            }else{
+                                setTimeout(_upload,60000,remote,local,privte);
+                            }
+                        });
+                        return;
+                    }else{
                         return self.emit('error',err1);
                     }
-                    
-                    if(isPrivte && !isVideo) return self.emit('uploaded',task.url);  
+                }
+                
+                if(isPrivte || !isVideo) return self.emit('uploaded',task.url);  
 
-                    _blob.acquireLease(task.root,task.slug,{ accessConditions: { 'if-modified-since': new Date().toUTCString()} }, function(err2, lease, response){
-                        if(!!err2){
-                            err2.url=task.url;
-                            console.log('upload-failed');
-                            return self.emit('error',err2);
-                        }
-                        self.emit('debug',{lease:lease,response:response});
-                        return self.emit('uploaded',task.url);  
-                    });
-                    
+                _blob.acquireLease(task.root,task.slug,{ accessConditions: { 'if-modified-since': new Date().toUTCString()} },
+                function(err2, lease, response){
+                    if(!!err2){
+                        err2.url=task.url;
+                        return self.emit('error',err2);
+                    }
+                    task.lease=lease;
+                    self.emit('debug',{lease:lease,response:response});
+                    return self.emit('uploaded',task);  
                 });
-                var pcheck=setInterval(function(){
-                    self.emit('progress',{
-                        status:'uploading',
-                        size:azserver.completeSize,
-                        total:azserver.totalSize,
-                        progress:100*azserver.completeSize/azserver.totalSize
-                    });
-                },azserver._timeWindow); //check every 10 seconds.
+                
             });
+            var pcheck=setInterval(function(){
+                self.emit('progress',{
+                    status:'uploading',
+                    size:azserver.completeSize,
+                    total:azserver.totalSize,
+                    progress:100*azserver.completeSize/azserver.totalSize
+                });
+            },azserver._timeWindow); //check every 10 seconds.
         });
     }
 
@@ -169,13 +180,19 @@ var Storage=function(args){
         });
     }
 
+
+    var names=['cero','uno','dos','tres','cuatro','cinco','seis','siete','ocho','nueve','diez','once'];
+    function monthName(){
+        return names[new Date().getMonth()];
+    }
+
     Storage.prototype.currentTask=function(){ return task;}
     Storage.prototype.upload = _upload;
     Storage.prototype.download = _download;
     Storage.prototype.fixAcl=_checkAcl;
     
     Storage.prototype.toRemote = function(name,md){
-        return _join(md||'uploaded',config.root||'',_webSafe(path.basename(name,path.extname(name))),_webSafe(name));
+       return _join(md||'/zo'+monthName(),config.root||'',_webSafe(path.basename(name,path.extname(name))),_webSafe(name));
     }
 
 }

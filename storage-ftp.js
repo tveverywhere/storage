@@ -128,7 +128,7 @@ var Storage=function(args){
                    read.size = err ? 0 : stats.size;
                    ftp.put(read,task.path, function(err) {
                         ftp.raw.quit();
-                        if(!err) return self.emit('uploaded',task.url);
+                        if(!err) return self.emit('uploaded',task);
                         else return self.emit('error',{error:err});
                     });
                 })
@@ -158,11 +158,16 @@ var Storage=function(args){
         }
     }
 
+    var names=['cero','uno','dos','tres','cuatro','cinco','seis','siete','ocho','nueve','diez','once'];
+    function monthName(){
+        return names[new Date().getMonth()];
+    }
+
     Storage.prototype.currentTask=function(){ return task;}
     Storage.prototype.upload = _upload; 
     Storage.prototype.download = _download; 
     Storage.prototype.toRemote = function(name,md){
-        return '/'+_join('published',config.root,_webSafe(path.basename(name,path.extname(name))),_webSafe(name));
+        return '/zo'+monthName()+_join(,config.root,_webSafe(path.basename(name,path.extname(name))),_webSafe(name));
     }
 
     config.rootUri=_parseHttpUri(config.rootUri,config.root);

@@ -183,7 +183,7 @@ var Storage=function(args){
 
     var names=['cero','uno','dos','tres','cuatro','cinco','seis','siete','ocho','nueve','diez','once'];
     function monthName(){
-        return names[new Date().getMonth()];
+        return names[new Date().getMonth()]+(1900+new Date().getYear()).toString(16);
     }
 
     Storage.prototype.currentTask=function(){ return task;}

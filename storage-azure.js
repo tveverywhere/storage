@@ -103,7 +103,7 @@ var Storage=function(args){
                     }
                 }
                 
-                if(isPrivte || !isVideo) return self.emit('uploaded',task.url);  
+                if(isPrivte || !isVideo) return self.emit('uploaded',task);  
 
                 _blob.acquireLease(task.root,task.slug,{ accessConditions: { 'if-modified-since': new Date().toUTCString()} },
                 function(err2, lease, response){

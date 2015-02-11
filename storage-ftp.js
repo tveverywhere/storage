@@ -166,8 +166,9 @@ var Storage=function(args){
     Storage.prototype.currentTask=function(){ return task;}
     Storage.prototype.upload = _upload; 
     Storage.prototype.download = _download; 
+
     Storage.prototype.toRemote = function(name,md){
-        return '/zo'+monthName()+_join(,config.root,_webSafe(path.basename(name,path.extname(name))),_webSafe(name));
+       return _join(md||'/zo'+monthName(),config.root||'',_webSafe(path.basename(name,path.extname(name))),_webSafe(name));
     }
 
     config.rootUri=_parseHttpUri(config.rootUri,config.root);

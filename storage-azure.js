@@ -195,6 +195,11 @@ var Storage=function(args){
        return _join(md||'/zo'+monthName(),config.root||'',_webSafe(path.basename(name,path.extname(name))),_webSafe(name));
     }
 
+    Storage.prototype.toUrl = function(remote,local){
+        _init(remote,local)
+        return task.url;
+    }
+
 }
 util.inherits(Storage, EventEmitter);
 exports = module.exports = function(args) {

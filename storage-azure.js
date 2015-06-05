@@ -1,5 +1,6 @@
 var fs=require('fs'),
     util = require("util"),
+    URL=require('url'),
     path = require("path"),
     EventEmitter = require("events").EventEmitter,
     azure=require('azure');
@@ -128,6 +129,15 @@ var Storage=function(args){
         });
     }
 
+    var _getFileInfo=function(uri,cb){
+        var names=URL.parse(uri).pathname.split('/');
+        var container=names[0];
+        var blobName=names.splice(1,names.length).join('/');
+        _blob.getBlobProperties(container, blobName, function (error, result, response) {
+          cb(error, result);
+        })
+    }
+
     var _download=function(remote,local,tried){
         tried=tried||0;
         if(_validateLocalFile(remote,local)){
@@ -190,6 +200,7 @@ var Storage=function(args){
     Storage.prototype.upload = _upload;
     Storage.prototype.download = _download;
     Storage.prototype.fixAcl=_checkAcl;
+    Storage.prototype.hasFile=_getFileInfo;
     
     Storage.prototype.toRemote = function(name,md){
        return _join(md||'/zo'+monthName(),config.root||'',_webSafe(path.basename(name,path.extname(name))),_webSafe(name));

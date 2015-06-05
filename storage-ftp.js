@@ -163,9 +163,14 @@ var Storage=function(args){
         return names[new Date().getMonth()];
     }
 
+    var _getFileInfo=function(uri,cb){
+        cb('E9000: not implemented for ftp storage');
+    }
+
     Storage.prototype.currentTask=function(){ return task;}
     Storage.prototype.upload = _upload; 
-    Storage.prototype.download = _download; 
+    Storage.prototype.download = _download;    
+    Storage.prototype.hasFile=_getFileInfo;
 
     Storage.prototype.toRemote = function(name,md){
        return _join(md||'/zo'+monthName(),config.root||'',_webSafe(path.basename(name,path.extname(name))),_webSafe(name));

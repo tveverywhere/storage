@@ -113,7 +113,10 @@ var Storage=function(args){
             }
         });
         uploader.on('end', function() {
-            console.log('Ended');
+           if(!_completed){
+                _completed=true;
+                self.emit('uploaded',task);
+            }
         });
     }
 
@@ -152,6 +155,12 @@ var Storage=function(args){
                     progress:prg
                 });
                 if(prg>=100 && !_completed){
+                    _completed=true;
+                    self.emit('downloaded',task);
+                }
+            });
+            downloader.on('end', function() {
+                if(!_completed){
                     _completed=true;
                     self.emit('downloaded',task);
                 }

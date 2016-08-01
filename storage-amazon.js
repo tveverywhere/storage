@@ -19,19 +19,6 @@ var Storage=function(args){
         accessKeyId:d.UserName,
         secretAccessKey:d.Password
     }
-    var awsS3Client = new AWS.S3({
-            accessKeyId: config.accessKeyId,
-            secretAccessKey: config.secretAccessKey,
-            region: config.region
-        });
-    var client = s3.createClient({
-        s3Client: awsS3Client,
-        maxAsyncS3: 20,     // this is the default
-        s3RetryCount: 1,    // this is the default
-        s3RetryDelay: 1000, // this is the default
-        multipartUploadThreshold: 20971520, // this is the default (20 MB)
-        multipartUploadSize: 15728640 // this is the default (15 MB)
-    });
 
     var _webSafe=function(t){
         if(!t) return "";
@@ -75,6 +62,22 @@ var Storage=function(args){
         return true;
     }
 
+    var  _buildClient=function(){
+        var awsS3Client = new AWS.S3({
+            accessKeyId: config.accessKeyId,
+            secretAccessKey: config.secretAccessKey,
+            region: config.region
+        });
+        return  s3.createClient({
+            s3Client: awsS3Client,
+            maxAsyncS3: 20,     // this is the default
+            s3RetryCount: 1,    // this is the default
+            s3RetryDelay: 1000, // this is the default
+            multipartUploadThreshold: 20971520, // this is the default (20 MB)
+            multipartUploadSize: 15728640 // this is the default (15 MB)
+        });
+    }
+
     var _upload=function(remote,local,privte){
 
         if(!_validateUploadFile(remote,local)) return;
@@ -82,36 +85,35 @@ var Storage=function(args){
         self.emit('debug','amazon validated');
         var isPrivte=task.root=='private' || !!privte;
         var isVideo=task.slug.indexOf('.mp4')==task.slug.length;
-
+        var _completed=false;
         var params={
             localFile:local,
             s3Params:{
                 ACL:isPrivte?'private':'public-read',
-                Key:task.slug,
+                Key:remote,
                 Bucket:d.Root
             }
         };
         self.emit('debug',params);
-        var uploader=client.uploadFile(params);
+        var uploader=_buildClient().uploadFile(params);
         uploader.on('error',function(err){
             self.emit('error',err);
-        })
-        uploader.on('fileOpened',function(fdSlicer){
-            self.emit('debug',fdSlicer);
-        })
-        uploader.on('fileClosed',function(){
-            self.emit('debug',{closed:true});
-        })
+        });
         uploader.on('progress', function() {
+            var prg=100*uploader.progressAmount/uploader.progressTotal;
             self.emit('progress',{
                 status:'uploading',
-                size: uploader.progressMd5Amount,
+                size: uploader.progressAmount,
                 total:uploader.progressTotal,
-                progress:100*uploader.progressMd5Amount/uploader.progressTotal
+                progress:prg
             });
+            if(prg>=100 && !_completed){
+                _completed=true;
+                self.emit('uploaded',task);
+            }
         });
         uploader.on('end', function() {
-            self.emit('uploaded',task);
+            console.log('Ended');
         });
     }
 
@@ -136,57 +138,32 @@ var Storage=function(args){
                 }
             };
             self.emit('debug',params);
-            var downloader=client.downloadFile(params);
+            var _completed=false;
+            var downloader=_buildClient().downloadFile(params);
             downloader.on('error',function(err){
                 self.emit('error',err);
-            })
-            downloader.on('fileOpened',function(fdSlicer){
-                self.emit('debug',fdSlicer);
-            })
-            downloader.on('fileClosed',function(){
-                self.emit('debug',{closed:true});
-            })
+            });
             downloader.on('progress', function() {
+                var prg=100*downloader.progressAmount/downloader.progressTotal;
                 self.emit('progress',{
                     status:'downloading',
-                    size: downloader.progressMd5Amount,
+                    size: downloader.progressAmount,
                     total:downloader.progressTotal,
-                    progress:100*downloader.progressMd5Amount/downloader.progressTotal
+                    progress:prg
                 });
-            });
-            downloader.on('end', function() {
-                self.emit('downloaded',task);
+                if(prg>=100 && !_completed){
+                    _completed=true;
+                    self.emit('downloaded',task);
+                }
             });
         }else{
-            self.emit('downloaded',task.url);
+            self.emit('downloaded',task);
         }
     }
 
     var _endsWith=function(s,e){
         return s.indexOf(suffix, s.length - s.length) !== -1;
     }
-
-    function _checkAcl(cb){
-        _blob.getServiceProperties(function(err,d){
-            if(!d.DefaultServiceVersion){
-                d={ Logging: { Version: '1.0', Delete: true, Read: true, Write: true, 
-                    RetentionPolicy: { Enabled: true, Days: 90 } },
-                    Metrics: { Version: '1.0', Enabled: true, IncludeAPIs: false, 
-                    RetentionPolicy: { Enabled: true, Days: 90 } }, 
-                DefaultServiceVersion: '2013-08-15' };
-                _blob.setServiceProperties(d,function(err1,d1){
-                    if(!!err1) console.log('Error-1',err1);
-                    _blob.getServiceProperties(function(err2,d2){
-                        if(!!err2) console.log('Error-2',err2);
-                        cb(d2.DefaultServiceVersion);
-                    });
-                })
-            }else{
-               cb(d.DefaultServiceVersion);
-            }
-        });
-    }
-
 
     var names=['cero','uno','dos','tres','cuatro','cinco','seis','siete','ocho','nueve','diez','once'];
     function monthName(){
@@ -196,7 +173,6 @@ var Storage=function(args){
     Storage.prototype.currentTask=function(){ return task;}
     Storage.prototype.upload = _upload;
     Storage.prototype.download = _download;
-    Storage.prototype.fixAcl=_checkAcl;
     Storage.prototype.hasFile=_getFileInfo;
     
     Storage.prototype.toRemote = function(name,md){

@@ -48,7 +48,7 @@ var Storage=function(args){
 
         task.slug = _join(tmp,_webSafe(task.name)+task.ext);
         task.path = _join(task.root,task.slug);
-        task.url = config.rootUri+task.path;
+        task.url = config.rootUri+task.slug;
 
         self.emit('debug',task);
         return local;

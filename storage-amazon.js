@@ -107,9 +107,17 @@ var Storage=function(args){
         var names=URL.parse(uri).pathname.split('/');
         var container=names[0];
         var blobName=names.splice(1,names.length).join('/');
-        _blob.getBlobProperties(container, blobName, function (error, result, response) {
-          cb(error, result);
+        new AWS.S3({
+            accessKeyId: config.accessKeyId,
+            secretAccessKey: config.secretAccessKey,
+            region: config.region
         })
+        .headObject({
+            Key:URL.parse(uri).pathname,
+            Bucket:d.Root
+        },function(err,data){
+            cb(err, data);
+        });
     }
 
     var  _buildClient=function(){

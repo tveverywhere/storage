@@ -127,25 +127,36 @@ var Storage=function(args){
     var _download=function(remote,local,tried){
         tried=tried||0;
         if(_validateLocalFile(remote,local)){
-            var azserver=_blob.getBlobToFile(task.root, task.slug,local,{timeout:33*60*1000},function(err){
-                clearInterval(pcheck);
-                if(!err) return self.emit('downloaded',task.url);
-                else{ 
-                    if(err.message.indexOf('getaddrinfo')>-1 || err.message.indexOf('ECONNRESET')>-1 || err.message.indexOf('ECONN')>-1){
-                        _download(remote,local,++tried);
-                    }else{
-                        return self.emit('error',{error:err,message:'download failed from cdn.'});
-                    }
+            self.emit('debug','amazon validated');
+            var params={
+                localFile:local,
+                s3Params:{
+                    Key:task.slug,
+                    Bucket:d.Root
                 }
-            });
-            var pcheck=setInterval(function(){
+            };
+            self.emit('debug',params);
+            var downloader=client.downloadFile(params);
+            downloader.on('error',function(err){
+                self.emit('error',err);
+            })
+            downloader.on('fileOpened',function(fdSlicer){
+                self.emit('debug',fdSlicer);
+            })
+            downloader.on('fileClosed',function(){
+                self.emit('debug',{closed:true});
+            })
+            downloader.on('progress', function() {
                 self.emit('progress',{
                     status:'downloading',
-                    size:azserver.completeSize,
-                    total:azserver.totalSize,
-                    progress:100*azserver.completeSize/azserver.totalSize
+                    size: downloader.progressMd5Amount,
+                    total:downloader.progressTotal,
+                    progress:100*downloader.progressMd5Amount/downloader.progressTotal
                 });
-            },azserver._timeWindow); //check every 10 seconds.
+            });
+            downloader.on('end', function() {
+                self.emit('downloaded',task);
+            });
         }else{
             self.emit('downloaded',task.url);
         }

@@ -1,9 +1,11 @@
 var fs=require('fs'),
     util = require("util"),
+    zlib = require('zlib'),
     URL=require('url'),
     path = require("path"),
     EventEmitter = require("events").EventEmitter,
     AWS = require('aws-sdk'),
+    mime = require('mime'),
     s3 = require('s3');
 
 var Storage=function(args){
@@ -62,6 +64,54 @@ var Storage=function(args){
         return true;
     }
 
+    var _upload=function(remote,local,privte){
+
+        if(!_validateUploadFile(remote,local)) return;
+
+        self.emit('debug','amazon validated');
+        var isPrivte=task.root=='private' || !!privte;
+        var isVideo=task.slug.indexOf('.mp4')==task.slug.length;
+        var _completed=false;
+        var body = fs.createReadStream(local);
+        new AWS.S3({
+            accessKeyId: config.accessKeyId,
+            secretAccessKey: config.secretAccessKey,
+            region: config.region,
+            params:{
+                ACL:isPrivte?'private':'public-read',
+                Key:task.slug,
+                Bucket:d.Root,
+                ContentType :  mime.lookup(local, 'application/octet-stream')
+            }
+        })
+        .upload({Body: body})
+        .on('httpUploadProgress', function(evt) {
+            var prg=100*evt.loaded/evt.total;
+            self.emit('progress',{
+                status:'uploading',
+                size: evt.loaded,
+                total:evt.total,
+                progress:prg
+            });
+        })
+        .send(function(err, data) { 
+            if(err){
+                self.emit('error',err);    
+            }else{
+                self.emit('uploaded',task);
+            }
+        });
+    }
+
+    var _getFileInfo=function(uri,cb){
+        var names=URL.parse(uri).pathname.split('/');
+        var container=names[0];
+        var blobName=names.splice(1,names.length).join('/');
+        _blob.getBlobProperties(container, blobName, function (error, result, response) {
+          cb(error, result);
+        })
+    }
+
     var  _buildClient=function(){
         var awsS3Client = new AWS.S3({
             accessKeyId: config.accessKeyId,
@@ -76,57 +126,6 @@ var Storage=function(args){
             multipartUploadThreshold: 20971520, // this is the default (20 MB)
             multipartUploadSize: 15728640 // this is the default (15 MB)
         });
-    }
-
-    var _upload=function(remote,local,privte){
-
-        if(!_validateUploadFile(remote,local)) return;
-
-        self.emit('debug','amazon validated');
-        var isPrivte=task.root=='private' || !!privte;
-        var isVideo=task.slug.indexOf('.mp4')==task.slug.length;
-        var _completed=false;
-        var params={
-            localFile:local,
-            s3Params:{
-                ACL:isPrivte?'private':'public-read',
-                Key:remote,
-                Bucket:d.Root
-            }
-        };
-        self.emit('debug',params);
-        var uploader=_buildClient().uploadFile(params);
-        uploader.on('error',function(err){
-            self.emit('error',err);
-        });
-        uploader.on('progress', function() {
-            var prg=100*uploader.progressAmount/uploader.progressTotal;
-            self.emit('progress',{
-                status:'uploading',
-                size: uploader.progressAmount,
-                total:uploader.progressTotal,
-                progress:prg
-            });
-            if(prg>=100 && !_completed){
-                _completed=true;
-                self.emit('uploaded',task);
-            }
-        });
-        uploader.on('end', function() {
-           if(!_completed){
-                _completed=true;
-                self.emit('uploaded',task);
-            }
-        });
-    }
-
-    var _getFileInfo=function(uri,cb){
-        var names=URL.parse(uri).pathname.split('/');
-        var container=names[0];
-        var blobName=names.splice(1,names.length).join('/');
-        _blob.getBlobProperties(container, blobName, function (error, result, response) {
-          cb(error, result);
-        })
     }
 
     var _download=function(remote,local,tried){

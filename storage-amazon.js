@@ -73,7 +73,7 @@ var Storage=function(args){
         var isVideo=task.slug.indexOf('.mp4')==task.slug.length;
         var _completed=false;
         var body = fs.createReadStream(local);
-        new AWS.S3({
+        var s3=new AWS.S3({
             accessKeyId: config.accessKeyId,
             secretAccessKey: config.secretAccessKey,
             region: config.region,
@@ -83,8 +83,9 @@ var Storage=function(args){
                 Bucket:d.Root,
                 ContentType :  mime.lookup(local, 'application/octet-stream')
             }
-        })
-        .upload({Body: body})
+        });
+
+        s3.upload({Body: body})
         .on('httpUploadProgress', function(evt) {
             var prg=100*evt.loaded/evt.total;
             self.emit('progress',{
@@ -98,7 +99,13 @@ var Storage=function(args){
             if(err){
                 self.emit('error',err);    
             }else{
-                self.emit('uploaded',task);
+                s3.getSignedUrl('getObject', {
+                    Key:task.slug,
+                    Bucket:d.Root,
+                }, function (err, url) {
+                    task.sourceFileWithSaS=url;
+                    self.emit('uploaded',task);
+                });
             }
         });
     }

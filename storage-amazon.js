@@ -43,12 +43,13 @@ var Storage=function(args){
         task.ext = path.extname(remote);
         task.name = path.basename(remote,task.ext);
         task.root = _webSafe(folders[0]);//
-        
+
         var tmp=_webSafe(folders.splice(1).join('/'));
 
         task.slug = _join(tmp,_webSafe(task.name)+task.ext);
-        task.path = _join(task.root,task.slug);
-        task.url = config.rootUri+task.slug;
+        task.path = task.root!=d.Root ? _join(task.root,task.slug) : task.slug;
+        
+        task.url = config.rootUri+task.path;
 
         self.emit('debug',task);
         return local;
@@ -79,11 +80,13 @@ var Storage=function(args){
             region: config.region,
             params:{
                 ACL:isPrivte?'private':'public-read',
-                Key:task.slug,
+                Key:task.path,
                 Bucket:d.Root,
                 ContentType :  mime.lookup(local, 'application/octet-stream')
             }
         });
+
+        //console.log(task,remote);
 
         s3.upload({Body: body})
         .on('httpUploadProgress', function(evt) {
@@ -199,7 +202,7 @@ var Storage=function(args){
     Storage.prototype.hasFile=_getFileInfo;
     
     Storage.prototype.toRemote = function(name,md){
-       return _join(md||'/zo'+monthName(),config.root||'',_webSafe(path.basename(name,path.extname(name))),_webSafe(name));
+       return _join(md||'/zo'+monthName(),_webSafe(path.basename(name,path.extname(name))),_webSafe(name));
     }
 
     Storage.prototype.toUrl = function(remote,local){

@@ -103,8 +103,9 @@ var Storage=function(args){
                 self.emit('error',err);    
             }else{
                 s3.getSignedUrl('getObject', {
-                    Key:task.slug,
+                    Key:task.path,
                     Bucket:d.Root,
+                    Expires:60*60 //let the download url expire in 60 minutes if encoder could not run before this time.
                 }, function (err, url) {
                     task.sourceFileWithSaS=url;
                     self.emit('uploaded',task);

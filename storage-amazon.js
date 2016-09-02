@@ -10,7 +10,7 @@ var fs=require('fs'),
 
 var Storage=function(args){
     EventEmitter.call(this);
-    var self=this;
+    var _self=this;
     var _existsSync = fs.existsSync || path.existsSync;
 
     var task={};
@@ -51,7 +51,7 @@ var Storage=function(args){
         
         task.url = config.rootUri+task.path;
 
-        self.emit('debug',task);
+        _self.emit('debug',task);
         return local;
     }
 
@@ -61,23 +61,24 @@ var Storage=function(args){
 
     var _validateUploadFile=function(remote,local){
         _init(remote,local);
-        if (!fs.existsSync(local)) { self.emit('error','file to be uploaded doesn\'t exist '+local);return false;}
+        if (!fs.existsSync(local)) { _self.emit('error','file to be uploaded doesn\'t exist '+local);return false;}
         return true;
     }
 
     var _upload=function(remote,local,privte){
-
+        
         if(!_validateUploadFile(remote,local)) return;
 
-        self.emit('debug','amazon validated');
+        _self.emit('debug','amazon validated');
         var isPrivte=task.root=='private' || !!privte;
         var isVideo=task.slug.indexOf('.mp4')==task.slug.length;
         var _completed=false;
         var body = fs.createReadStream(local);
-        var s3=new AWS.S3({
+        var s3client=new AWS.S3({
             accessKeyId: config.accessKeyId,
             secretAccessKey: config.secretAccessKey,
             region: config.region,
+            //logger:process.stdout,
             params:{
                 ACL:isPrivte?'private':'public-read',
                 Key:task.path,
@@ -85,30 +86,43 @@ var Storage=function(args){
                 ContentType :  mime.lookup(local, 'application/octet-stream')
             }
         });
+        
+        var stats = fs.statSync(local);
 
-        //console.log(task,remote);
+        var _uploader=s3client.upload({
+            Body: body,
+            Bucket: d.Root,
+            Key: task.path,
+            ContentType :  mime.lookup(local, 'application/octet-stream'),
+            ContentLength: stats.size
+        });
 
-        s3.upload({Body: body})
-        .on('httpUploadProgress', function(evt) {
-            var prg=100*evt.loaded/evt.total;
-            self.emit('progress',{
-                status:'uploading',
-                size: evt.loaded,
-                total:evt.total,
-                progress:prg
-            });
-        })
-        .send(function(err, data) { 
+        var _progressWatcher=setInterval(function(){
+            task.percent=100*_uploader.totalUploadedBytes/_uploader.totalBytes;
+            _self.emit('progress',{
+                    status:'uploading',
+                    size: _uploader.totalUploadedBytes,
+                    total: _uploader.totalBytes,
+                    progress:task.percent
+                });
+        },1000);
+
+        _uploader.send(function(err, data) {
+            clearInterval(_progressWatcher);
             if(err){
-                self.emit('error',err);    
+                _self.emit('error',err);    
             }else{
-                s3.getSignedUrl('getObject', {
+                s3client.getSignedUrl('getObject', {
                     Key:task.path,
                     Bucket:d.Root,
                     Expires:60*60 //let the download url expire in 60 minutes if encoder could not run before this time.
                 }, function (err, url) {
-                    task.sourceFileWithSaS=url;
-                    self.emit('uploaded',task);
+                    if(err){
+                        _self.emit('error',err);
+                    }else{
+                        task.sourceFileWithSaS=url;
+                        _self.emit('uploaded',task);
+                    }
                 });
             }
         });
@@ -140,7 +154,7 @@ var Storage=function(args){
         return  s3.createClient({
             s3Client: awsS3Client,
             maxAsyncS3: 20,     // this is the default
-            s3RetryCount: 1,    // this is the default
+            s3RetryCount: 5,    // this is the default
             s3RetryDelay: 1000, // this is the default
             multipartUploadThreshold: 20971520, // this is the default (20 MB)
             multipartUploadSize: 15728640 // this is the default (15 MB)
@@ -150,7 +164,7 @@ var Storage=function(args){
     var _download=function(remote,local,tried){
         tried=tried||0;
         if(_validateLocalFile(remote,local)){
-            self.emit('debug','amazon validated');
+            _self.emit('debug','amazon validated');
             var params={
                 localFile:local,
                 s3Params:{
@@ -158,15 +172,15 @@ var Storage=function(args){
                     Bucket:d.Root
                 }
             };
-            self.emit('debug',params);
+            _self.emit('debug',params);
             var _completed=false;
             var downloader=_buildClient().downloadFile(params);
             downloader.on('error',function(err){
-                self.emit('error',err);
+                _self.emit('error',err);
             });
             downloader.on('progress', function() {
                 var prg=100*downloader.progressAmount/downloader.progressTotal;
-                self.emit('progress',{
+                _self.emit('progress',{
                     status:'downloading',
                     size: downloader.progressAmount,
                     total:downloader.progressTotal,
@@ -174,17 +188,17 @@ var Storage=function(args){
                 });
                 if(prg>=100 && !_completed){
                     _completed=true;
-                    self.emit('downloaded',task);
+                    _self.emit('downloaded',task);
                 }
             });
             downloader.on('end', function() {
                 if(!_completed){
                     _completed=true;
-                    self.emit('downloaded',task);
+                    _self.emit('downloaded',task);
                 }
             });
         }else{
-            self.emit('downloaded',task);
+            _self.emit('downloaded',task);
         }
     }
 
